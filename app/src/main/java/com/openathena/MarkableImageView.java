@@ -29,6 +29,12 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
     // Cooldown period of 1 second
     private static final long INTENT_COOLDOWN_MS = 1000;
 
+    private float scaleFactor = 1.f;
+    private float lastTouchX;
+    private float lastTouchY;
+    private float posX = 0f;
+    private float posY = 0f;
+
     public MarkableImageView(Context context, AttributeSet attrs) {
         super(context, attrs);
         if (!(context instanceof AthenaActivity)) {
@@ -67,6 +73,38 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
                 gestureDetector.onTouchEvent(event);
                 long currentTime = System.currentTimeMillis();
 
+                float dx = event.getX() - lastTouchX;
+                float dy = event.getY() - lastTouchY;
+                boolean doPan = (dx*dx + dy*dy > 15*15);
+
+                // handle panning for the view
+                if (parent instanceof SelectionActivity) { // Only handle pan if not currently zooming
+                    switch (event.getAction()) {
+                        case MotionEvent.ACTION_DOWN:
+                            lastTouchX = event.getX();
+                            lastTouchY = event.getY();
+                            break;
+                        case MotionEvent.ACTION_MOVE:
+
+                            if (doPan) {
+                                posX += dx;
+                                posY += dy;
+                                invalidate(); // Redraw the canvas
+
+                                lastTouchX = event.getX();
+                                lastTouchY = event.getY();
+                                // break;
+                                return true;
+                            }
+                    }
+                }
+
+                if(event.getAction() == MotionEvent.ACTION_UP) {
+                    lastTouchX = event.getX();
+                    lastTouchY = event.getY();
+                }
+
+                // move marker position and redraw
                 if (event.getAction() == MotionEvent.ACTION_UP && currentTime - lastIntentTime > INTENT_COOLDOWN_MS){
                     if (!parent.isImageLoaded || parent.imageUri == null || parent.iView == null) {
                         return true;
@@ -82,14 +120,18 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
                     }
                     double render_width = yahweh.getWidth();
                     double render_height = yahweh.getHeight();
-                    parent.set_selection_x((int) Math.round(((1.0d * event.getX()) / render_width) * original_width));
-                    parent.set_selection_y((int) Math.round(((1.0d * event.getY()) / render_height) * original_height));
+                    // proportion of marked location within image, irrespective of zoom or translate
+                    double x_prop = (((1.0d * event.getX()) / scaleFactor) + posX) / render_width;
+                    double y_prop = (((1.0d * event.getY()) / scaleFactor) + posY) / render_height;
+                    // pixel coordinate in (u, v) of original image size
+                    parent.set_selection_x((int) Math.round(x_prop * original_width));
+                    parent.set_selection_y((int) Math.round(y_prop * original_height));
                     Log.d("X",parent.get_selection_x() + "");
                     Log.d("Y",parent.get_selection_y() + "");
 
                     if (parent.isImageLoaded && parent.isDEMLoaded) {
                         parent.calculateImage(yahweh, false); // this may cause the view to re-size due to constraint layout
-                        yahweh.mark((double) event.getX() / (1.0d * render_width), (double) event.getY() / (1.0d * render_height));
+                        yahweh.mark(x_prop, y_prop);
                     }
                 }
 
@@ -116,19 +158,45 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
             long currentTime = System.currentTimeMillis();
-            if (currentTime - lastIntentTime > INTENT_COOLDOWN_MS) {
-                if (parent instanceof MainActivity && detector.getCurrentSpan() > 125 && detector.getTimeDelta() > 75) {
+
+
+            // This condition ensures that zoom functionality is only available in SelectionActivity
+            if (parent instanceof SelectionActivity) {
+                float currentScaleFactor = detector.getScaleFactor();
+                // Adjust scale factor within bounds
+                float newScaleFactor = scaleFactor * currentScaleFactor;
+                boolean doReturnToMainActivity = (newScaleFactor < 0.80f && currentTime - lastIntentTime > INTENT_COOLDOWN_MS);
+                newScaleFactor = Math.max(1f, Math.min(newScaleFactor, 5.0f));
+
+                // If user tries to zoom out beyond a certain threshold, return to MainActivity
+                if (doReturnToMainActivity) {
+                    // Reset scale factor to default to prepare for next use
+                    scaleFactor = 1f;
+                    Intent intent = new Intent(parent, MainActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    parent.startActivity(intent);
+                    lastIntentTime = currentTime;
+                } else {
+                    // Apply zooming within SelectionActivity
+                    float focusX = detector.getFocusX();
+                    float focusY = detector.getFocusY();
+
+                    // Calculate the difference caused by scaling to adjust posX and posY accordingly
+                    float scaleChange = newScaleFactor / scaleFactor;
+                    posX = (posX - focusX) * scaleChange + focusX;
+                    posY = (posY - focusY) * scaleChange + focusY;
+
+                    // This is where the view is updated reflect the new scale factor
+                    scaleFactor = newScaleFactor;
+                    invalidate();
+                }
+            } else if (parent instanceof MainActivity && currentTime - lastIntentTime > INTENT_COOLDOWN_MS) {
+                // Condition for transitioning from MainActivity to SelectionActivity
+                // based on some criteria, e.g., a significant pinch gesture detected
+                if (detector.getCurrentSpan() > 125 && detector.getTimeDelta() > 75) {
                     Intent intent = new Intent(parent, SelectionActivity.class);
                     parent.startActivity(intent);
                     lastIntentTime = currentTime;
-                } else if (parent instanceof SelectionActivity) {
-                    final float scaleFactorThreshold = 0.97f;
-                    if (detector.getScaleFactor() < scaleFactorThreshold) { // Check for pinch-to-zoom-out gesture
-                        Intent intent = new Intent(parent, MainActivity.class);
-                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                        parent.startActivity(intent);
-                        lastIntentTime = currentTime;
-                    }
                 }
             }
             return super.onScale(detector);
@@ -167,32 +235,57 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
 
     @Override
     protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
-        if (theMarker != null) {
-            float length = Math.max(getWidth() / 48, getHeight() / 48);
-            float gap = length / 1.5f;
 
+        canvas.save();
+        // Apply zoom and pan transformations
+        canvas.scale(scaleFactor, scaleFactor, scaleGestureDetector.getFocusX(),scaleGestureDetector.getFocusY());
+        canvas.translate(posX, posY);
+
+        super.onDraw(canvas);
+
+        // Drawing operations go here
+        if (theMarker != null) {
+            drawMarker(canvas); // Draw the marker considering transformations
+        } else if (parent.isImageLoaded) {
+            theMarker = new Marker(0.5d, 0.5d);
+            invalidate();
+        }
+
+
+        canvas.restore(); // Restore canvas to its original state
+    }
+
+    protected void drawMarker(Canvas canvas) {
+
+        // After scaling and translating, draw your marker
+        // The drawing operations here are affected by the transformations applied above
+        if (theMarker != null) {
+            float length = Math.max(getWidth() / 48, getHeight() / 48) * scaleFactor;
+            float gap = (length / 1.5f) * scaleFactor;
             Paint paint = new Paint();
             paint.setColor(Color.parseColor("#FE00DD")); // HI-VIS PINK
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(gap);
 
+            // Adjust marker's position based on current scale and translation
             float actualX = (float) theMarker.x_prop * getWidth();
             float actualY = (float) theMarker.y_prop * getHeight();
 
-            // Draw horizontal lines
+            // Adjust for translation
+            actualX += posX;
+            actualY += posY;
+
+            // Adjust for scale
+            actualX *= scaleFactor;
+            actualY *= scaleFactor;
+
+            // Draw the marker
             canvas.drawLine(actualX - length - gap, actualY, actualX - gap, actualY, paint);
             canvas.drawLine(actualX + gap, actualY, actualX + length + gap, actualY, paint);
-
-            // Draw vertical lines
             canvas.drawLine(actualX, actualY - length - gap, actualX, actualY - gap, paint);
             canvas.drawLine(actualX, actualY + gap, actualX, actualY + length + gap, paint);
-        } else {
-            if (parent.isImageLoaded) {
-                theMarker = new Marker(0.5d, 0.5d);
-                invalidate();
-            }
         }
+
     }
 
     protected class Marker {
