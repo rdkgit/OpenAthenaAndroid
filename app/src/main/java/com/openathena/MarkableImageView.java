@@ -74,112 +74,7 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
         setScaleType(ScaleType.MATRIX);
 
 
-//    public MarkableImageView(Context context, AttributeSet attrs) {
-//        super(context, attrs);
-//        if (!(context instanceof AthenaActivity)) {
-//            return;
-//        }
-//        parent = (AthenaActivity) context;
-//
-//        scaleGestureDetector = new ScaleGestureDetector(context, new MyScaleGestureListener());
-//        gestureDetector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
-//            @Override
-//            public boolean onDoubleTap(MotionEvent e) {
-//                long currentTime = System.currentTimeMillis();
-//                if (currentTime - lastIntentTime > INTENT_COOLDOWN_MS) {
-//                    if (parent instanceof MainActivity){
-//                        Intent intent = new Intent(parent, SelectionActivity.class);
-//                        parent.startActivity(intent);
-//                        lastIntentTime = currentTime;
-//                    } else if (parent instanceof SelectionActivity) {
-//                        Intent intent = new Intent(parent, MainActivity.class);
-//                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-//                        parent.startActivity(intent);
-//                        lastIntentTime = currentTime;
-//                    }
-//                }
-//                return super.onDoubleTap(e);
-//            }
-//        });
-
         MarkableImageView yahweh = this; // reference to this MarkableImageView, for use in listener
-
-
-
-//        this.setOnTouchListener(new View.OnTouchListener() {
-//            @Override
-//            public boolean onTouch(View v, MotionEvent event) {
-//                // Detect gestures
-//                scaleGestureDetector.onTouchEvent(event);
-//                gestureDetector.onTouchEvent(event);
-//                long currentTime = System.currentTimeMillis();
-//
-//                float dx = event.getX() - lastTouchX;
-//                float dy = event.getY() - lastTouchY;
-//                boolean doPan = (dx*dx + dy*dy > 15*15);
-//
-//                // handle panning for the view
-//                if (parent instanceof SelectionActivity) { // Only handle pan if not currently zooming
-//                    switch (event.getAction()) {
-//                        case MotionEvent.ACTION_DOWN:
-//                            lastTouchX = event.getX();
-//                            lastTouchY = event.getY();
-//                            break;
-//                        case MotionEvent.ACTION_MOVE:
-//
-//                            if (doPan) {
-//                                posX += dx;
-//                                posY += dy;
-//                                invalidate(); // Redraw the canvas
-//
-//                                lastTouchX = event.getX();
-//                                lastTouchY = event.getY();
-//                                // break;
-//                                return true;
-//                            }
-//                    }
-//                }
-//
-//                if(event.getAction() == MotionEvent.ACTION_UP) {
-//                    lastTouchX = event.getX();
-//                    lastTouchY = event.getY();
-//                }
-//
-//                // move marker position and redraw
-//                if (event.getAction() == MotionEvent.ACTION_UP && currentTime - lastIntentTime > INTENT_COOLDOWN_MS){
-//                    if (!parent.isImageLoaded || parent.imageUri == null || parent.iView == null) {
-//                        return true;
-//                    }
-//                    int original_width;
-//                    int original_height;
-//                    int[] original_dimensions = parent.getImageDimensionsFromUri(parent.imageUri);
-//                    if (original_dimensions == null) {
-//                        return true;
-//                    } else {
-//                        original_width = original_dimensions[0];
-//                        original_height = original_dimensions[1];
-//                    }
-//                    double render_width = yahweh.getWidth();
-//                    double render_height = yahweh.getHeight();
-//                    // proportion of marked location within image, irrespective of zoom or translate
-//                    double x_prop = (((1.0d * event.getX()) / scaleFactor) + posX) / render_width;
-//                    double y_prop = (((1.0d * event.getY()) / scaleFactor) + posY) / render_height;
-//                    // pixel coordinate in (u, v) of original image size
-//                    parent.set_selection_x((int) Math.round(x_prop * original_width));
-//                    parent.set_selection_y((int) Math.round(y_prop * original_height));
-//                    Log.d("X",parent.get_selection_x() + "");
-//                    Log.d("Y",parent.get_selection_y() + "");
-//
-//                    if (parent.isImageLoaded && parent.isDEMLoaded) {
-//                        parent.calculateImage(yahweh, false); // this may cause the view to re-size due to constraint layout
-//                        yahweh.mark(x_prop, y_prop);
-//                    }
-//                }
-//
-//                return true;
-//            }
-//
-//        });
 
         this.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
@@ -332,27 +227,6 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
         this.invalidate();
     }
 
-//    @Override
-//    protected void onDraw(Canvas canvas) {
-//
-//        canvas.save();
-//        // Apply zoom and pan transformations
-//        canvas.scale(scaleFactor, scaleFactor, scaleGestureDetector.getFocusX(),scaleGestureDetector.getFocusY());
-//        canvas.translate(posX, posY);
-//
-//        super.onDraw(canvas);
-//
-//        // Drawing operations go here
-//        if (theMarker != null) {
-//            drawMarker(canvas); // Draw the marker considering transformations
-//        } else if (parent.isImageLoaded) {
-//            theMarker = new Marker(0.5d, 0.5d);
-//            invalidate();
-//        }
-//
-//
-//        canvas.restore(); // Restore canvas to its original state
-//    }
     @Override
     protected void onDraw(Canvas canvas) {
         canvas.save();
@@ -362,8 +236,10 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
 
         // Draw the marker
         if (theMarker != null) {
-            float actualX = (float) (theMarker.x_prop * getWidth() * scaleFactor) + posX;
-            float actualY = (float) (theMarker.y_prop * getHeight() * scaleFactor) + posY;
+//            float actualX = (float) (theMarker.x_prop * getWidth() * scaleFactor) + posX;
+//            float actualY = (float) (theMarker.y_prop * getHeight() * scaleFactor) + posY;
+            float actualX = (float) theMarker.x_prop * getWidth();
+            float actualY = (float) theMarker.y_prop * getHeight();
             // Adjust marker drawing size based on scale
             float markerSize = 20 * scaleFactor;
             canvas.drawCircle(actualX, actualY, markerSize, paint);
