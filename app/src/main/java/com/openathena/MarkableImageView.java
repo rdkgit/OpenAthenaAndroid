@@ -196,11 +196,45 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
     }
 
     private class ScaleListener extends ScaleGestureDetector.SimpleOnScaleGestureListener {
+        float lastFocalX;
+        float lastFocalY;
+
+        @Override
+        public boolean onScaleBegin(ScaleGestureDetector detector) {
+            lastFocalX = detector.getFocusX();
+            lastFocalY = detector.getFocusY();
+            return true;
+        }
+
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
-            scaleFactor *= detector.getScaleFactor();
-            // Check and apply scale factor bounds if necessary
-            scaleFactor = Math.max(0.1f, Math.min(scaleFactor, 5.0f));
+            float scaleFactorFactor = detector.getScaleFactor();
+            float newScaleFactor = scaleFactor * scaleFactorFactor;
+
+            // Limit the scale factor to prevent the image from becoming too small or too large.
+            newScaleFactor = Math.max(0.1f, Math.min(newScaleFactor, 5.0f));
+            // Bound scaleFactorFactor based on result of the previous
+            scaleFactorFactor = newScaleFactor / scaleFactor;
+
+            // Calculate the translation needed to keep the focal point stationary
+            float focalX = detector.getFocusX();
+            float focalY = detector.getFocusY();
+
+            // Calculate the focal point shift from the start of the gesture
+            float focalShiftX = focalX - lastFocalX;
+            float focalShiftY = focalY - lastFocalY;
+
+            scaleFactor = newScaleFactor;
+
+            // Adjust posX and posY to account for the focal point movement
+            // This keeps the focal point under the user's fingers stationary
+            posX += focalShiftX * (1 - scaleFactorFactor);
+            posY += focalShiftY * (1 - scaleFactorFactor);
+
+            // Update the last focal point
+            lastFocalX = focalX;
+            lastFocalY = focalY;
+
             invalidate();
             return true;
         }
@@ -265,9 +299,7 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
             Log.e(TAG, "Error: width or height was zero at time of marking");
             return;
         }
-        if (theMarker == null) {
-            theMarker = new Marker(x_prop, y_prop);
-        }
+        theMarker = new Marker(x_prop, y_prop);
     }
 
     /**
@@ -324,14 +356,14 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
     @Override
     protected void onDraw(Canvas canvas) {
         canvas.save();
-        canvas.translate(posX, posY);
         canvas.scale(scaleFactor, scaleFactor);
+        canvas.translate(posX, posY);
         super.onDraw(canvas); // Draw the image
 
         // Draw the marker
         if (theMarker != null) {
-            float actualX = (float) (theMarker.x_prop * getWidth() - posX) / scaleFactor;
-            float actualY = (float) (theMarker.y_prop * getHeight() - posY) / scaleFactor;
+            float actualX = (float) (theMarker.x_prop * getWidth() * scaleFactor) + posX;
+            float actualY = (float) (theMarker.y_prop * getHeight() * scaleFactor) + posY;
             // Adjust marker drawing size based on scale
             float markerSize = 20 * scaleFactor;
             canvas.drawCircle(actualX, actualY, markerSize, paint);
@@ -392,8 +424,8 @@ public class MarkableImageView extends androidx.appcompat.widget.AppCompatImageV
                 activePointerId = -1;
                 setMarkerPosition(event.getX(), event.getY());
                 // pixel coordinate in (u, v) of original image size
-                AthenaActivity.set_selection_x((int) Math.round(theMarker.x_prop * original_width));
-                AthenaActivity.set_selection_y((int) Math.round(theMarker.y_prop * original_height));
+                parent.set_selection_x((int) Math.round(theMarker.x_prop * original_width));
+                parent.set_selection_y((int) Math.round(theMarker.y_prop * original_height));
                 if (parent.isImageLoaded && parent.isDEMLoaded) {
                     parent.calculateImage(this, false); // this may cause the view to re-size due to constraint layout
                 }
